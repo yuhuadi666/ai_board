@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ai-board
+
+server:
+  port: 8080
+
+
+
+# Qwen (通义千问) API 配置 - 请将 your-api-key 替换为您的阿里云 DashScope API Key
+# 获取地址: https://dashscope.console.aliyun.com/
+langchain4j:
+  qwen:
+    api-key: your-api-key
+    model-name: qwen-turbo  # 可选: qwen-turbo, qwen-plus, qwen-max
+    max-tokens: 1024
+    temperature: 0.5
