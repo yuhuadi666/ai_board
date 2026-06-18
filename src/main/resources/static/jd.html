@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JD 定向优化 - Resume Agent</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="/index.html">
+        <div class="mark">RA</div>
+        <div>
+          <strong>Resume Agent</strong>
+          <span>LangChain4j + Spring Boot 3</span>
+        </div>
+      </a>
+      <nav class="nav">
+        <a href="/index.html">场景总览</a>
+        <a class="active" href="/jd.html">JD 定向优化</a>
+        <a href="/update.html">问答式更新</a>
+      </nav>
+      <div class="side-note">第一轮改动可编辑；第二轮改动只允许选择是否保留。</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <p class="eyebrow">Scenario 01</p>
+          <h1>根据 JD 生成新简历</h1>
+          <p class="lead">上传简历并粘贴目标岗位 JD，系统会抽取文本并交给 Writer Agent。确认一轮改动后，Critic Agent 会评估 JD 匹配度和简历完整度，再触发 Writer Agent 二次生成。</p>
+        </div>
+        <div class="actions">
+          <a class="btn secondary" href="/index.html">返回首页</a>
+        </div>
+      </div>
+
+      <div class="stepper">
+        <div class="step active" id="step1">1 上传与 JD</div>
+        <div class="step" id="step2">2 编辑一轮改动</div>
+        <div class="step" id="step3">3 二次生成与导出</div>
+      </div>
+
+      <section class="card panel" id="inputPanel">
+        <div class="form-grid">
+          <div>
+            <label for="resumeFile">上传简历</label>
+            <label class="upload-box" id="uploadBox" for="resumeFile">
+              <input id="resumeFile" type="file" accept=".doc,.docx,.pdf" hidden>
+              <span>
+                <strong id="fileName">选择 doc / docx / pdf 文件</strong><br>
+                <span id="fileHint" style="color:var(--muted);line-height:2">会在后端抽取简历文本</span>
+              </span>
+            </label>
+          </div>
+          <div>
+            <label for="jdText">目标岗位 JD</label>
+            <textarea id="jdText" placeholder="粘贴目标岗位职责、任职要求、加分项等信息"></textarea>
+            <div class="actions" style="margin-top:12px">
+              <button class="btn secondary" id="sampleJd" type="button">填入示例 JD</button>
+              <button class="btn green" id="startBtn" type="button">生成一轮改动</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card panel" id="firstPanel" style="display:none;margin-top:18px">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Writer Agent</p>
+            <h2>一轮改动点，可自行编辑</h2>
+            <p class="lead">左侧是原片段，右侧是 Writer Agent 建议。你可以直接修改建议文本，再点击确认进入 Critic 评估。</p>
+          </div>
+          <div class="actions">
+            <button class="btn secondary" id="showExtracted" type="button">查看抽取文本</button>
+            <button class="btn green" id="confirmFirst" type="button">确认并评估</button>
+          </div>
+        </div>
+        <div id="firstChanges" class="change-list"></div>
+      </section>
+
+      <section class="card panel" id="reviewPanel" style="display:none;margin-top:18px">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Critic + Writer Agent</p>
+            <h2>二次优化建议，只选择是否保留</h2>
+            <p class="lead">Critic 会判断是否符合 JD、简历是否完整；Writer 会基于评估结果再生成改动点。这一轮不开放编辑。</p>
+          </div>
+          <div class="actions">
+            <button class="btn green" id="exportBtn" type="button">导出新简历 docx</button>
+          </div>
+        </div>
+        <div class="score-grid" id="scoreGrid"></div>
+        <div id="criticLists" class="grid-2" style="margin-top:12px"></div>
+        <div id="secondChanges" class="change-list"></div>
+      </section>
+
+      <section class="card panel" id="resumePanel" style="display:none;margin-top:18px">
+        <label for="resumePreview">当前完整简历文本</label>
+        <textarea id="resumePreview" class="resume-area"></textarea>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast">已完成</div>
+  <script src="/jd.js"></script>
+</body>
+</html>

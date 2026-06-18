@@ -1,0 +1,15 @@
+# IDE files
+.idea/
+*.iml
+
+# Build output
+target/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log

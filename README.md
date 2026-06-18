@@ -1,81 +1,72 @@
-# AI 心情留言墙（像素风 H5 + Spring Boot + LangChain4j）
+# Resume Agent Demo
 
-一个前后端一体的小项目：  
-用户无需登录，在像素风留言墙写下当下心情；后端调用 LLM 生成约 50 字暖心回复并展示。  
-留言数据存内存，支持标记完成/删除，重启后状态自动清空。
+一个基于 `Spring Boot 3`、`LangChain4j` 和 Qwen 模型的简历 Agent 演示项目。
+
+当前版本保留原技术框架，移除了旧的心情留言板业务，先实现第一个场景：上传简历后，根据目标岗位 JD 生成定向优化的新简历。
 
 ## 技术栈
 
 - 后端：`Spring Boot 3.2.5`
 - AI：`LangChain4j 1.0.0-beta3` + `Qwen (qwen-turbo)`
-- 前端：单页 H5（静态资源由 Spring Boot 直接托管）
-- 存储：内存 `ConcurrentHashMap`
+- 文件解析：`Apache POI`、`PDFBox`
+- 前端：Spring Boot 托管的多页静态 H5
 
-## 一步步启动项目
+## 当前功能
 
-### 1) 准备环境
+- 上传 `doc`、`docx`、`pdf` 简历并抽取文本。
+- 粘贴岗位 JD 后交给 Writer Agent 生成一轮改动点。
+- 一轮改动会展示“原文片段 -> 新表达”，用户可以编辑。
+- 用户确认后交给 Critic Agent 评估：
+  - 是否符合 JD 要求。
+  - 简历是否完整。
+- Critic 结果再交给 Writer Agent 二次生成。
+- 二次改动不允许编辑，只允许选择是否保留。
+- 根据最终内容导出 `resume-agent-output.docx`。
+
+第二个场景“通过智能追问更新旧简历”目前只做前端页面占位，后端暂未实现。
+
+## 启动项目
+
+### 1. 准备环境
 
 - JDK `17+`
 - Maven `3.9+`
 
-### 2) 拉起项目并安装依赖
+### 2. 配置 Qwen
 
-在项目根目录执行：
-
-```bash
-mvn clean package
-```
-
-### 3) 修改 `application.yml` 的 Key
-
-文件路径：`src/main/resources/application.yml`
-
-把下面配置中的 key 改成你自己的 DashScope Key（建议使用环境变量，不要把真实 key 提交到仓库）：
+修改 `src/main/resources/application.yml`：
 
 ```yaml
 langchain4j:
   qwen:
     api-key: your-api-key
     model-name: qwen-turbo
-    max-tokens: 1024
+    max-tokens: 4096
     temperature: 0.5
 ```
 
-### 4) 启动服务
-
-方式一（推荐）：
+### 3. 启动
 
 ```bash
 mvn spring-boot:run
 ```
 
-方式二：在 IDE 里运行启动类 `AiBoardApplication`。
-
-### 5) 本地访问
-
-启动成功后浏览器打开：
+浏览器访问：
 
 - [http://localhost:8080](http://localhost:8080)
+- [http://localhost:8080/jd.html](http://localhost:8080/jd.html)
 
-## 项目亮点
+## 接口
 
-- **像素风游戏化视觉**
-  - 中央留言墙、错落便签、顶部双黄灯打光、扫描线氛围。
-- **无登录、即开即用**
-  - 前端本地生成 `visitorId`，无需账号体系即可记录“我的留言”。
-- **AI 暖心回复**
-  - 每次提交心情，后端调用 LLM 自动生成温暖附言（约 50 字）。
-- **交互细节丰富**
-  - 悬停便签出现操作按钮（完成/删除）、完成后盖章、`BINGO` 动效反馈。
-- **完成态规则清晰**
-  - 已完成留言不可删除、不可重复完成，规则由后端保证。
-- **默认数据开箱即用**
-  - 系统启动自动加载 `default.json` 作为初始留言模板。
-- **状态仅内存存储**
-  - 重启后自动恢复初始状态，适合演示和快速迭代。
-
-
-后续扩展思路：
-- 数据持久化（MySQL/Redis）
-- 多人共享留言墙（全局墙）
-- 对条目类型/计划类型的支持（便签中todo项的状态管理）
+- `POST /api/resume/jd/initial`
+  - `multipart/form-data`
+  - 字段：`resume`、`jd`
+  - 返回：抽取文本、Writer 一轮完整简历、可编辑改动点。
+- `POST /api/resume/jd/review`
+  - `application/json`
+  - 字段：`jd`、`currentResume`、`confirmedChanges`
+  - 返回：Critic 评估结果、Writer 二次完整简历、不可编辑改动点。
+- `POST /api/resume/jd/export`
+  - `application/json`
+  - 字段：`resumeText`、`acceptedChanges`
+  - 返回：`docx` 文件。

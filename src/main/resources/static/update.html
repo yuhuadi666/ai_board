@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>问答式更新 - Resume Agent</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="/index.html">
+        <div class="mark">RA</div>
+        <div>
+          <strong>Resume Agent</strong>
+          <span>LangChain4j + Spring Boot 3</span>
+        </div>
+      </a>
+      <nav class="nav">
+        <a href="/index.html">场景总览</a>
+        <a href="/jd.html">JD 定向优化</a>
+        <a class="active" href="/update.html">问答式更新</a>
+      </nav>
+      <div class="side-note">此场景本期只做前端展示，后端功能暂不实现。</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <p class="eyebrow">Scenario 02</p>
+          <h1>通过智能追问更新旧简历</h1>
+          <p class="lead">适合很久没更新简历的人。Agent 会围绕最近项目、职责变化、业务指标、技术能力和职业亮点持续追问，把零散经历整理成可写进简历的素材。</p>
+        </div>
+        <div class="actions">
+          <a class="btn secondary" href="/index.html">返回首页</a>
+          <button class="btn blue" disabled>后端待实现</button>
+        </div>
+      </div>
+
+      <section class="grid-2">
+        <article class="card panel">
+          <h2>AI 职业访谈</h2>
+          <div class="change-list">
+            <div class="after">我们先从最近两年开始。你做过最能代表能力升级的项目是什么？</div>
+            <div class="before">我负责过招聘系统里的候选人匹配模块，从规则匹配升级到模型排序。</div>
+            <div class="after">这个项目影响了哪些指标？比如匹配准确率、HR 处理效率、转化率或客户满意度。</div>
+          </div>
+          <textarea style="margin-top:12px;min-height:96px" placeholder="后续会在这里输入回答并继续追问" disabled></textarea>
+        </article>
+
+        <aside class="card panel">
+          <h2>追问方向</h2>
+          <div class="change-list">
+            <div class="score"><span>项目背景</span><p class="lead">为什么必须做，解决了什么业务问题。</p></div>
+            <div class="score"><span>个人贡献</span><p class="lead">你负责的关键决策、协作推动和技术取舍。</p></div>
+            <div class="score"><span>业务指标</span><p class="lead">上线周期、效率提升、准确率、收入、留存等量化结果。</p></div>
+            <div class="score"><span>能力标签</span><p class="lead">沉淀为岗位可识别的能力关键词。</p></div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

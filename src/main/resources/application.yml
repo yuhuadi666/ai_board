@@ -13,5 +13,5 @@ langchain4j:
   qwen:
     api-key: your-api-key
     model-name: qwen-turbo  # 可选: qwen-turbo, qwen-plus, qwen-max
-    max-tokens: 1024
+    max-tokens: 4096
     temperature: 0.5
