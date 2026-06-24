@@ -9,6 +9,7 @@ public class QwenProperties {
     private String modelName = "";
     private Integer maxTokens = 100;
     private Float temperature = 0.5f;
+    private Boolean enableThinking = true;
 
     public String getApiKey() {
         return apiKey;
@@ -40,5 +41,13 @@ public class QwenProperties {
 
     public void setTemperature(Float temperature) {
         this.temperature = temperature;
+    }
+
+    public Boolean getEnableThinking() {
+        return enableThinking;
+    }
+
+    public void setEnableThinking(Boolean enableThinking) {
+        this.enableThinking = enableThinking;
     }
 }

@@ -2,10 +2,11 @@ package org.example.aiboard.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.example.aiboard.dto.CriticReportDto;
 import org.example.aiboard.dto.InitialRewriteResponse;
 import org.example.aiboard.dto.ResumeChangeDto;
@@ -21,21 +22,80 @@ public class ResumeAgentService {
     private static final Logger log = LoggerFactory.getLogger(ResumeAgentService.class);
     private static final int MAX_MODEL_TEXT = 12_000;
 
-    private final ChatLanguageModel chatModel;
+    private final ChatModel chatModel;
+    private final QwenThinkingStreamService thinkingStreamService;
     private final ObjectMapper objectMapper;
 
-    public ResumeAgentService(ObjectProvider<ChatLanguageModel> chatModelProvider, ObjectMapper objectMapper) {
+    public ResumeAgentService(
+            ObjectProvider<ChatModel> chatModelProvider,
+            QwenThinkingStreamService thinkingStreamService,
+            ObjectMapper objectMapper) {
         this.chatModel = chatModelProvider.getIfAvailable();
+        this.thinkingStreamService = thinkingStreamService;
         this.objectMapper = objectMapper;
     }
 
     public InitialRewriteResponse initialRewrite(String resumeText, String jd) {
-        String prompt = """
+        String prompt = buildInitialPrompt(resumeText, jd);
+        try {
+            JsonNode root = parseWriterRoot(chatModel.chat(prompt), null);
+            return buildInitialResponse(resumeText, jd, root);
+        } catch (Exception e) {
+            log.warn("initial writer agent failed, using fallback: {}", e.getMessage());
+            List<ResumeChangeDto> changes = fallbackChanges(resumeText, jd, false);
+            return new InitialRewriteResponse(resumeText, applyChanges(resumeText, changes), changes);
+        }
+    }
+
+    public void initialRewriteStream(
+            String resumeText,
+            String jd,
+            Consumer<String> onThinking,
+            Consumer<InitialRewriteResponse> onComplete,
+            Consumer<Throwable> onError) {
+        String prompt = buildInitialPrompt(resumeText, jd);
+        thinkingStreamService.streamPrompt(
+                prompt,
+                onThinking,
+                completion -> {
+                    try {
+                        JsonNode root = parseWriterRoot(completion.content(), completion.thinking());
+                        onComplete.accept(buildInitialResponse(resumeText, jd, root));
+                    } catch (Exception e) {
+                        log.warn(
+                                "initial writer stream parse failed (contentLen={}, thinkingLen={}), using fallback: {}",
+                                safeLength(completion.content()),
+                                safeLength(completion.thinking()),
+                                e.getMessage());
+                        List<ResumeChangeDto> changes = fallbackChanges(resumeText, jd, false);
+                        onComplete.accept(new InitialRewriteResponse(
+                                resumeText, applyChanges(resumeText, changes), changes));
+                    }
+                },
+                onError);
+    }
+
+    private InitialRewriteResponse buildInitialResponse(String resumeText, String jd, JsonNode root) {
+        String rewritten = text(root, "rewrittenResume", resumeText);
+        List<ResumeChangeDto> changes = parseChanges(root.path("changes"));
+        if (changes.isEmpty()) {
+            changes = fallbackChanges(resumeText, jd, false);
+        }
+        return new InitialRewriteResponse(resumeText, rewritten, changes);
+    }
+
+    private String buildInitialPrompt(String resumeText, String jd) {
+        return """
                 你是 Writer Agent，任务是根据岗位 JD 改写候选人的中文简历。
                 要求：
                 1. 只基于原简历中已有事实改写，不编造公司、项目、指标、年限、学历。
                 2. 优先强化与 JD 相关的技能、项目职责、业务结果和关键词。
-                3. 输出 JSON，不要 Markdown，不要解释。
+                3. 最终回复的 content 中必须输出且仅输出一个合法 JSON，不要 Markdown，不要额外解释。
+                4. changes 至少 3 条、最多 10 条；每条必须包含：
+                   - beforeText：原简历中的真实片段（找不到则空字符串）
+                   - afterText：改写后可直写入简历的具体中文内容（完整句子或 bullet），禁止只写修改方向、建议、总结性话术
+                   - reason：一句话说明改动原因
+                5. rewrittenResume 必须是应用全部 changes 后的完整简历正文。
                 JSON 格式：
                 {
                   "rewrittenResume": "完整的新简历文本",
@@ -43,7 +103,7 @@ public class ResumeAgentService {
                     {
                       "section": "改动所在模块",
                       "beforeText": "原文片段，没有则写空字符串",
-                      "afterText": "改写后片段",
+                      "afterText": "改写后可直接放入简历的具体文本",
                       "reason": "为什么这样改"
                     }
                   ]
@@ -55,19 +115,6 @@ public class ResumeAgentService {
                 岗位 JD：
                 %s
                 """.formatted(limit(resumeText), limit(jd));
-        try {
-            JsonNode root = callJson(prompt);
-            String rewritten = text(root, "rewrittenResume", resumeText);
-            List<ResumeChangeDto> changes = parseChanges(root.path("changes"));
-            if (changes.isEmpty()) {
-                changes = fallbackChanges(resumeText, jd, false);
-            }
-            return new InitialRewriteResponse(resumeText, rewritten, changes);
-        } catch (Exception e) {
-            log.warn("initial writer agent failed, using fallback: {}", e.getMessage());
-            List<ResumeChangeDto> changes = fallbackChanges(resumeText, jd, false);
-            return new InitialRewriteResponse(resumeText, applyChanges(resumeText, changes), changes);
-        }
     }
 
     public ReviewRewriteResponse reviewAndRewrite(String currentResume, String jd, List<ResumeChangeDto> confirmedChanges) {
@@ -180,12 +227,159 @@ public class ResumeAgentService {
         return updated.strip();
     }
 
+    private JsonNode parseWriterRoot(String content, String thinking) throws Exception {
+        Exception lastError = null;
+        JsonNode best = null;
+        int bestScore = 0;
+        for (String source : List.of(content, thinking)) {
+            if (blank(source)) {
+                continue;
+            }
+            for (String candidate : findJsonCandidates(source)) {
+                try {
+                    JsonNode root = objectMapper.readTree(candidate);
+                    int score = countConcreteChanges(root);
+                    if (score > bestScore) {
+                        best = root;
+                        bestScore = score;
+                    }
+                } catch (Exception e) {
+                    lastError = e;
+                }
+            }
+        }
+        if (best != null) {
+            return best;
+        }
+        if (lastError != null) {
+            throw lastError;
+        }
+        throw new IllegalArgumentException("model output does not contain valid writer JSON");
+    }
+
+    private int countConcreteChanges(JsonNode root) {
+        if (root == null || !root.isObject()) {
+            return 0;
+        }
+        JsonNode changes = root.path("changes");
+        if (!changes.isArray()) {
+            return 0;
+        }
+        int count = 0;
+        for (JsonNode item : changes) {
+            String afterText = text(item, "afterText", "");
+            if (!blank(afterText) && !looksLikeMetaSuggestion(afterText)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean isWriterJson(JsonNode root) {
+        return countConcreteChanges(root) > 0;
+    }
+
+    private static boolean looksLikeMetaSuggestion(String afterText) {
+        String text = afterText.strip();
+        return text.startsWith("围绕目标岗位强化表达")
+                || text.startsWith("建议在")
+                || text.startsWith("建议补充")
+                || text.contains("修改方向")
+                || text.contains("强化表达：突出与");
+    }
+
+    private static List<String> findJsonCandidates(String raw) {
+        List<String> candidates = new ArrayList<>();
+        String text = stripCodeFence(raw.strip());
+        int searchFrom = 0;
+        while (searchFrom < text.length()) {
+            int start = text.indexOf('{', searchFrom);
+            if (start < 0) {
+                break;
+            }
+            int end = findMatchingBraceEnd(text, start);
+            if (end > start) {
+                candidates.add(text.substring(start, end + 1));
+                searchFrom = end + 1;
+            } else {
+                searchFrom = start + 1;
+            }
+        }
+        if (candidates.isEmpty()) {
+            candidates.add(extractJson(text));
+        }
+        return candidates;
+    }
+
+    private static String stripCodeFence(String text) {
+        if (!text.contains("```")) {
+            return text;
+        }
+        StringBuilder builder = new StringBuilder();
+        int index = 0;
+        while (index < text.length()) {
+            int fenceStart = text.indexOf("```", index);
+            if (fenceStart < 0) {
+                builder.append(text.substring(index));
+                break;
+            }
+            builder.append(text, index, fenceStart);
+            int contentStart = text.indexOf('\n', fenceStart);
+            if (contentStart < 0) {
+                break;
+            }
+            contentStart++;
+            int fenceEnd = text.indexOf("```", contentStart);
+            if (fenceEnd < 0) {
+                builder.append(text.substring(contentStart));
+                break;
+            }
+            builder.append(text, contentStart, fenceEnd);
+            index = fenceEnd + 3;
+        }
+        return builder.toString().strip();
+    }
+
+    private static int findMatchingBraceEnd(String text, int start) {
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = start; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (ch == '\\') {
+                    escaped = true;
+                } else if (ch == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (ch == '"') {
+                inString = true;
+            } else if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static int safeLength(String value) {
+        return value == null ? 0 : value.length();
+    }
+
     private JsonNode callJson(String prompt) throws Exception {
         if (chatModel == null) {
-            throw new IllegalStateException("ChatLanguageModel is not configured");
+            throw new IllegalStateException("ChatModel is not configured");
         }
         String raw = chatModel.chat(prompt);
-        return objectMapper.readTree(extractJson(raw));
+        return parseWriterRoot(raw, null);
     }
 
     private List<ResumeChangeDto> parseChanges(JsonNode node) {
@@ -195,7 +389,7 @@ public class ResumeAgentService {
         }
         for (JsonNode item : node) {
             String afterText = text(item, "afterText", "");
-            if (blank(afterText)) {
+            if (blank(afterText) || looksLikeMetaSuggestion(afterText)) {
                 continue;
             }
             changes.add(new ResumeChangeDto(

@@ -107,6 +107,80 @@ async function readError(response) {
   return text || `请求失败：${response.status}`;
 }
 
+function showThinkingPanel(show) {
+  const panel = $("thinkingPanel");
+  const content = $("thinkingContent");
+  if (show) {
+    content.textContent = "";
+    panel.hidden = false;
+  } else {
+    panel.hidden = true;
+    content.textContent = "";
+  }
+}
+
+function appendThinking(text) {
+  const content = $("thinkingContent");
+  content.textContent += text;
+  content.scrollTop = content.scrollHeight;
+}
+
+async function consumeSse(response, handlers) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let eventName = "message";
+  let dataLines = [];
+
+  const dispatch = () => {
+    if (!dataLines.length) return;
+    const data = dataLines.join("\n");
+    dataLines = [];
+    if (eventName === "thinking") {
+      handlers.onThinking?.(data);
+    } else if (eventName === "done") {
+      handlers.onDone?.(data);
+    } else if (eventName === "error") {
+      handlers.onError?.(data);
+    }
+    eventName = "message";
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      dispatch();
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        dispatch();
+        eventName = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trimStart());
+      } else if (line === "") {
+        dispatch();
+      }
+    }
+  }
+}
+
+function applyInitialResult(data, jd) {
+  state.jd = jd;
+  state.extractedResume = data.extractedResume || "";
+  state.currentResume = data.rewrittenResume || state.extractedResume;
+  state.firstChanges = data.changes || [];
+  $("resumePreview").value = state.currentResume;
+  renderFirstChanges(state.firstChanges);
+  $("firstPanel").style.display = "block";
+  $("resumePanel").style.display = "block";
+  activateStep(2);
+  showToast("一轮改动已生成");
+}
+
 $("resumeFile").addEventListener("change", () => {
   const file = $("resumeFile").files[0];
   if (!file) return;
@@ -131,21 +205,22 @@ $("startBtn").addEventListener("click", async () => {
   form.append("resume", file);
   form.append("jd", jd);
   setBusy($("startBtn"), true, "生成中...");
+  showThinkingPanel(true);
   try {
-    const response = await fetch("/api/resume/jd/initial", { method: "POST", body: form });
+    const response = await fetch("/api/resume/jd/initial/stream", { method: "POST", body: form });
     if (!response.ok) throw new Error(await readError(response));
-    const data = await response.json();
-    state.jd = jd;
-    state.extractedResume = data.extractedResume || "";
-    state.currentResume = data.rewrittenResume || state.extractedResume;
-    state.firstChanges = data.changes || [];
-    $("resumePreview").value = state.currentResume;
-    renderFirstChanges(state.firstChanges);
-    $("firstPanel").style.display = "block";
-    $("resumePanel").style.display = "block";
-    activateStep(2);
-    showToast("一轮改动已生成");
+    await consumeSse(response, {
+      onThinking: appendThinking,
+      onDone: (payload) => {
+        showThinkingPanel(false);
+        applyInitialResult(JSON.parse(payload), jd);
+      },
+      onError: (message) => {
+        throw new Error(message || "生成失败");
+      }
+    });
   } catch (error) {
+    showThinkingPanel(false);
     showToast(error.message || "生成失败");
   } finally {
     setBusy($("startBtn"), false);

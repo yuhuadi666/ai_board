@@ -1,9 +1,11 @@
 package org.example.aiboard.config;
 
 import dev.langchain4j.community.model.dashscope.QwenChatModel;
+import dev.langchain4j.community.model.dashscope.QwenStreamingChatModel;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.UserMessage;
@@ -22,8 +24,18 @@ import org.springframework.context.annotation.Configuration;
 public class LangChain4jConfig {
 
     @Bean
-    public ChatLanguageModel chatLanguageModel(QwenProperties properties) {
+    public ChatModel chatLanguageModel(QwenProperties properties) {
         return QwenChatModel.builder()
+                .apiKey(properties.getApiKey())
+                .modelName(properties.getModelName())
+                .maxTokens(properties.getMaxTokens())
+                .temperature(properties.getTemperature())
+                .build();
+    }
+
+    @Bean
+    public StreamingChatModel streamingChatModel(QwenProperties properties) {
+        return QwenStreamingChatModel.builder()
                 .apiKey(properties.getApiKey())
                 .modelName(properties.getModelName())
                 .maxTokens(properties.getMaxTokens())
@@ -59,10 +71,10 @@ public class LangChain4jConfig {
     }
 
     @Bean
-    public Assistant assistant(ChatLanguageModel chatLanguageModel,
+    public Assistant assistant(ChatModel chatLanguageModel,
                                ChatMemoryProvider chatMemoryProvider) {
         return AiServices.builder(Assistant.class)
-                .chatLanguageModel(chatLanguageModel)
+                .chatModel(chatLanguageModel)
                 .chatMemoryProvider(chatMemoryProvider)
                 .build();
     }

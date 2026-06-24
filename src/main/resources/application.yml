@@ -12,6 +12,7 @@ server:
 langchain4j:
   qwen:
     api-key: your-api-key
-    model-name: qwen-turbo  # 可选: qwen-turbo, qwen-plus, qwen-max
-    max-tokens: 4096
+    model-name: qwen-flash  # 纯文本、低延迟，走 Generation 接口；比 qwen-plus/max 更快
+    max-tokens: 2048
     temperature: 0.5
+    enable-thinking: true  # 关闭可进一步提速，但前端不再展示思考过程

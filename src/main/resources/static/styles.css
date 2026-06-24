@@ -283,6 +283,31 @@ textarea {
 
 .list { margin: 8px 0 0; padding-left: 20px; color: var(--muted); line-height: 1.75; }
 
+.thinking-panel {
+  margin-top: 18px;
+  border-color: rgba(33, 91, 143, .18);
+  background: linear-gradient(180deg, rgba(227, 240, 251, .55), rgba(255, 255, 255, .92));
+}
+
+.thinking-panel[hidden] {
+  display: none !important;
+}
+
+.thinking-stream {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .88);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .toast {
   position: fixed;
   right: 24px;
